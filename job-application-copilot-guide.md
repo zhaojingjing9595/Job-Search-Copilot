@@ -50,13 +50,28 @@ The LLM decides which tool to call, when to call it, whether a posting is a matc
 
 ---
 
-## Phase 1 — Profile Tool
+## Phase 1 — Profile Setup (one-time, CV-driven)
 
-- [ ] Write `profile.yaml` with your skills, target roles, must-haves, and dealbreakers
-- [ ] Write a plain function that loads and returns it as structured data
-- [ ] Test it standalone (no LLM involved yet)
+Instead of hand-writing the profile file, generate it once from your CV plus a few clarifying questions. This is a **separate one-time setup script** (`setup_profile.py`), not part of the live agent loop — you run it once during setup and edit the resulting YAML by hand afterward if anything changes.
 
-**Milestone:** calling the function returns clean, structured profile data.
+**Step 1 — Extract text from your CV PDF**
+- [ ] `pip install pypdf` (or `pdfplumber` for better layout handling)
+- [ ] Write a function that reads the PDF and pulls out raw text
+
+**Step 2 — Use the LLM to structure it (one-off call, not a `@tool`)**
+- [ ] Send the extracted CV text to Gemini, asking it to extract structured fields (skills, experience summary, education, etc.)
+- [ ] Request structured JSON output matching the shape you want — Gemini supports requesting a JSON schema directly, worth using here instead of hoping the model formats things correctly on its own
+
+**Step 3 — Ask clarifying questions (no LLM needed)**
+- [ ] Simple `input()` prompts for the things a CV won't contain: target roles, must-haves, dealbreakers, preferred locations, salary floor if relevant
+- [ ] Merge these answers into the structured data from Step 2
+
+**Step 4 — Save the merged result**
+- [ ] Write the combined dict to `profile.yaml` — this is the same file your `get_profile()` tool reads later, so everything downstream (Phase 4 onward) works the same regardless of how the file was generated
+- [ ] Write a plain `get_profile()` function (used later in Phase 4) that loads and returns this YAML as structured data
+- [ ] Test `get_profile()` standalone (no LLM involved at agent-runtime)
+
+**Milestone:** running `python setup_profile.py --cv my_resume.pdf`, answering a few prompts, and ending up with a populated, inspectable `profile.yaml`. Separately, `get_profile()` returns that data cleanly when called.
 
 ---
 
