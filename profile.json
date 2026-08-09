@@ -1,0 +1,156 @@
+{
+  "title": "Full Stack Engineer",
+  "summary": "Full Stack Engineer with 4 years of experience building web applications for networking product and distributed backend services, using React, Node.js, Python, MongoDB/PostgreSQL, and cloud deployment. Graduated with an M.Sc. in Engineering from the Technion. I enjoy digging into hard problems, thinking a few steps ahead and I\u2019m always drawn to learning new things. Currently deepening my expertise in Machine Learning and Generative AI including building AI-integrated applications and automation workflows.",
+  "professional_experiences": [
+    {
+      "company": "BBT.live",
+      "role": "Full Stack developer",
+      "years": "2022-2025",
+      "highlights": [
+        "Develop and maintain UX/UI features for SD-WAN network Orchestrator web platform supporting multi-tenancy, contributing across frontend, backend services, databases, and deployment workflows.",
+        "Created a Python-based automated report generation system for network throughput statistics.",
+        "Developed real-time updated interactive network diagrams to visualize topology and connections.",
+        "Co-designed 1+1 failover solution for on-premise network devices \u2013 ensuring high availability and zero-downtime switchover.",
+        "Implemented backend services for alerts and notification workflow, reducing excessive alerting behavior.",
+        "Built microservices using Redis for caching, Kafka for event-driven workflow across distributed systems.",
+        "Built API automation workflow for QA team to improve testing efficiency."
+      ]
+    },
+    {
+      "company": "Deltika",
+      "role": "Full Stack Developer Intern",
+      "years": "2022",
+      "highlights": [
+        "Built complex responsive frontend components \u2013 interactive maps, charts and investor dashboards.",
+        "Contributed to backend services using FastAPI for user authentication, authorization and data analysis."
+      ]
+    },
+    {
+      "company": "Technion",
+      "role": "Teaching Assistant",
+      "years": "2019-2020",
+      "highlights": []
+    }
+  ],
+  "education": [
+    {
+      "school": "Developers Institute",
+      "degree": "Machine Learning and Generative AI Bootcamp (Intensive training in Data Analysis, Machine Learning, Deep Learning, LLM, NLP, RAG architecture, Prompt engineering, Agentic AI)",
+      "year": "2026-Present"
+    },
+    {
+      "school": "Israel Tech Challenge (ITC)",
+      "degree": "Full Stack Web Development",
+      "year": "2022"
+    },
+    {
+      "school": "Technion",
+      "degree": "M.Sc. Mapping and Geo-information Engineering (Majored in Photogrammetry, focused on Computer Vision / Image Processing, using Python)",
+      "year": "2017-2020"
+    },
+    {
+      "school": "University of Electronic Science & Technology of China",
+      "degree": "B.Sc. Mapping and GIS",
+      "year": "2013-2017"
+    }
+  ],
+  "skills": {
+    "languages": [
+      "Javascript",
+      "TypeScript",
+      "Python",
+      "Java",
+      "SQL",
+      "NoSQL",
+      "Bash"
+    ],
+    "frontend": [
+      "React",
+      "Next.js",
+      "Meteor Blaze",
+      "Tailwind",
+      "HTML",
+      "CSS"
+    ],
+    "backend": [
+      "Node.js",
+      "Express",
+      "REST APIs",
+      "FastAPI",
+      "Redis",
+      "GraphQL",
+      "Microservices"
+    ],
+    "database": [
+      "relational/non-relational DB",
+      "MongoDB",
+      "PostgreSQL",
+      "MySQL",
+      "Firebase firestore"
+    ],
+    "ml": [
+      "scikit-learn",
+      "XGBoost",
+      "PyTorch / TensorFlow",
+      "Feature engineering",
+      "EDA",
+      "model evaluation & metrics"
+    ],
+    "ai": [
+      "Claude Code",
+      "Cursor",
+      "ChatGPT",
+      "LLMs",
+      "NLP",
+      "RAG pipeline",
+      "prompt engineering",
+      "MCP"
+    ],
+    "devops_and_platforms": [
+      "CI/CD",
+      "Git/Github",
+      "Linux/Ubuntu",
+      "Docker",
+      "Postman",
+      "Vercel",
+      "Render",
+      "Neon",
+      "Supabase",
+      "Railway",
+      "AWS/GCP",
+      "Vultr Cloud"
+    ]
+  },
+  "other": {
+    "languages": [
+      "Chinese (Native)",
+      "English (Fluent)",
+      "Hebrew (Intermediate)"
+    ],
+    "hobby": []
+  },
+  "preferences": {
+    "target_roles": [
+      "full stack developer",
+      "software engineer",
+      "ai engineer",
+      "full stack ai engineer"
+    ],
+    "must_haves": [
+      "nothing specific"
+    ],
+    "deal_breakers": [
+      "none"
+    ],
+    "preferred_locations": [
+      "remote",
+      "central israel",
+      "tel aviv",
+      "rishon letziyon",
+      "herzilia",
+      "ramat gan",
+      "etc"
+    ],
+    "salary_floor": "26000 nis/month"
+  }
+}

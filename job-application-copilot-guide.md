@@ -75,13 +75,30 @@ Instead of hand-writing the profile file, generate it once from your CV plus a f
 
 ---
 
-## Phase 2 — Job Board Tool
+## Phase 2 — Job Board Tool (JobSpy MCP)
 
-- [ ] Write a function that calls your job board API given a query/location and returns a list of postings (title, company, description, link, date)
-- [ ] Handle basic pagination/rate limits
-- [ ] Test standalone — print real results to console
+read on job board sourcing mcp server: https://www.remoet.dev/blog/mcp-servers-for-job-search-compared
 
-**Milestone:** you can pull real, live postings into a Python list.
+**Why the change:** Adzuna doesn't cover Israel. JobSpy scrapes multiple boards (LinkedIn, Indeed, Glassdoor, Google Jobs, and others) and its supported country list explicitly includes Israel, so it fixes the geography problem. Trade-off: it's scraping-based rather than an official API, so it's more prone to rate-limiting/blocking (e.g. Cloudflare/CAPTCHA) than a clean REST API like Adzuna.
+
+- [ ] Clone a JobSpy MCP server implementation, e.g.:
+  ```
+  git clone https://github.com/lockie/jobspy-mcp
+  cd jobspy-mcp
+  uv run jobspy-mcp
+  ```
+  (or `borgius/jobspy-mcp-server` if you prefer the Node/Docker-based variant)
+- [ ] Run it locally and confirm it starts (`npx @modelcontextprotocol/inspector` or equivalent works for a quick manual check)
+- [ ] Configure your search defaults: `search_term`, `location` (e.g. `"Tel Aviv, Israel"`), `site_name` (which boards to include), `is_remote`, `results_wanted`
+- [ ] Add it to your MCP client config (or, if using LangChain instead of raw MCP client, wrap the same call in an `@tool`-decorated function so it fits the same tool-calling pattern as your other tools)
+- [ ] Test standalone — run one search and confirm real postings come back with title, company, description, link, and date fields populated
+
+**Notes carried over from the original plan:**
+- You still control **pagination and volume from your side** — cap `results_wanted` per run (e.g. 20–50) rather than letting the server return everything it can scrape
+- **Rate limits / blocking still apply** — since this is scraping under the hood, add basic retry/backoff and don't assume every board in `site_name` will succeed every run; treat partial results as normal, not a failure
+- If a specific board (e.g. LinkedIn) gets blocked in testing, fall back to whichever boards are working rather than blocking the whole pipeline on one source
+
+**Milestone:** you can pull real, live postings for Israel into a Python list via the JobSpy MCP tool.
 
 ---
 

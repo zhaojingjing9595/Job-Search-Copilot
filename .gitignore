@@ -2,3 +2,5 @@
 __pycache__/
 *.pyc
 .venv/
+.mcp_tokens/
+.google_tokens/
