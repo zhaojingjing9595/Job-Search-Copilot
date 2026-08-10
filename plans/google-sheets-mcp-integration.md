@@ -16,13 +16,34 @@ Ruled out as causes, empirically:
   through `sheets.googleapis.com` (returned the real header row) while every call to
   `sheetsmcp.googleapis.com` fails. The credentials are good; the MCP endpoint alone rejects us.
 
-**Shipped instead:** the regular Sheets API via `gspread`, reusing the same OAuth client.
-- `tools/sheets_auth.py` — `google-auth-oauthlib` `InstalledAppFlow`, token cached to `.google_tokens/sheets.json` (gitignored).
-- `tools/sheets_logging.py` — `log_job_match(row, spreadsheet_id=None)` using `worksheet.append_row()`; no read-then-write dance needed.
-- `tools/mcp_config.py` — `sheets` entry removed, with a comment explaining why and how to restore it.
+**Shipped instead: two working backends, side by side** (both verified 2026-08-09 writing real
+rows to a scratch sheet). The MCP path exists because learning MCP is a goal of this project;
+the direct path is the no-subprocess fallback.
 
-To switch back once preview access is granted, only `log_job_match`'s body changes — the
-signature is deliberately identical, so Phase 4's `@tool` wrapper and Phase 5's graph are unaffected.
+| | `log_job_match()` | `log_job_match_via_mcp()` |
+|---|---|---|
+| Transport | Sheets REST API via `gspread` | `mcp-google-sheets` over stdio |
+| Sync/async | sync | async |
+| Append | `append_row()` — one server-side call | `get_sheet_data` + `update_cells` (no append tool exists) |
+
+- `tools/sheets_auth.py` — `google-auth-oauthlib` `InstalledAppFlow`; token cached to
+  `.google_tokens/sheets.json` (gitignored). Also exposes `materialize_oauth_client_file()`,
+  which writes the OAuth client JSON the MCP server wants from the `.env` values, so the
+  client id/secret lives in exactly one place.
+- `tools/sheets_logging.py` — both functions, identical signatures and resulting row.
+- `tools/mcp_config.py` — `sheets` entry pointing at `uvx mcp-google-sheets@latest`.
+
+**Two gotchas worth remembering:**
+1. `--with "mcp<2"` is mandatory in the uvx args. `mcp-google-sheets` declares `mcp>=1.8.0`,
+   so uv resolves mcp 2.0.0, which removed `mcp.server.fastmcp` → the server dies on import
+   with `ModuleNotFoundError`, surfacing to the client only as an opaque `McpError:
+   Connection closed`. Drop the pin once upstream supports 2.x.
+2. `get_sheet_data` returns `{"spreadsheetId": ..., "valueRanges": [{"range": ..., "values": [...]}]}`
+   — not the flat `data` key the README's phrasing suggests.
+
+To switch to the official Google server once preview access is granted, only the body of
+`log_job_match_via_mcp` and the `mcp_config.py` entry change — signatures stay identical, so
+Phase 4's `@tool` wrapper and Phase 5's graph are unaffected either way.
 
 ---
 
