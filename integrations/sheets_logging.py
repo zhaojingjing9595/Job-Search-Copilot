@@ -17,8 +17,8 @@ inserts blank rows - so appending is read-then-write (get_sheet_data to find
 the first empty row, update_cells to fill it). gspread's append_row() does
 that server-side in one call, which is why the direct path is shorter.
 
-usage: python -m tools.sheets_logging          # direct API
-       python -m tools.sheets_logging --mcp    # via MCP server
+usage: python -m integrations.sheets_logging          # direct API
+       python -m integrations.sheets_logging --mcp    # via MCP server
 """
 import json
 import os
@@ -28,10 +28,12 @@ import gspread
 from dotenv import load_dotenv
 from rich.console import Console
 
-from tools.sheets_auth import get_sheets_credentials
+from integrations.sheets_auth import get_sheets_credentials
+from core.logger import get_logger
 
 load_dotenv()
 console = Console()
+logger = get_logger(__name__)
 
 _SHEET_TAB = "Sheet1"  # rename here if your tab is named differently
 _ROW_FIELDS = ["company", "title", "match_reasoning", "status", "link", "date"]
@@ -65,9 +67,15 @@ def log_job_match(row: dict, spreadsheet_id: str | None = None) -> None:
             (company, title, match_reasoning, status, link, date).
         spreadsheet_id (str | None): defaults to GOOGLE_SHEET_ID from .env.
     """
-    _get_worksheet(spreadsheet_id).append_row(
-        _row_values(row), value_input_option="USER_ENTERED"
-    )
+    logger.info("Appending job match row for %r to Sheets API", row.get("company"))
+    try:
+        _get_worksheet(spreadsheet_id).append_row(
+            _row_values(row), value_input_option="USER_ENTERED"
+        )
+    except Exception:
+        logger.exception("Failed to append row via Sheets API")
+        raise
+    logger.info("Row appended via Sheets API")
 
 
 # --- via the mcp-google-sheets MCP server ---------------------------------
@@ -79,7 +87,7 @@ async def get_sheets_tools():
         list[BaseTool]: e.g. `sheets_get_sheet_data`, `sheets_update_cells`,
         ready to bind to a LangGraph/LangChain agent.
     """
-    from tools.mcp_client import get_mcp_tools
+    from core.mcp_client import get_mcp_tools
 
     tools = await get_mcp_tools()
     return [tool for tool in tools if tool.name.startswith("sheets_")]
@@ -106,23 +114,29 @@ async def log_job_match_via_mcp(row: dict, spreadsheet_id: str | None = None) ->
     """
     values = _row_values(row)
     spreadsheet_id = _resolve_sheet_id(spreadsheet_id)
-    tools = {tool.name: tool for tool in await get_sheets_tools()}
+    logger.info("Appending job match row for %r via MCP sheets server", row.get("company"))
+    try:
+        tools = {tool.name: tool for tool in await get_sheets_tools()}
 
-    existing = _parse_mcp_result(await tools["sheets_get_sheet_data"].ainvoke(
-        {"spreadsheet_id": spreadsheet_id, "sheet": _SHEET_TAB, "range": "A:A"}
-    ))
-    # shape: {"spreadsheetId": ..., "valueRanges": [{"range": ..., "values": [[...], ...]}]}
-    value_ranges = existing.get("valueRanges") or [{}]
-    next_row = len(value_ranges[0].get("values") or []) + 1
+        existing = _parse_mcp_result(await tools["sheets_get_sheet_data"].ainvoke(
+            {"spreadsheet_id": spreadsheet_id, "sheet": _SHEET_TAB, "range": "A:A"}
+        ))
+        # shape: {"spreadsheetId": ..., "valueRanges": [{"range": ..., "values": [[...], ...]}]}
+        value_ranges = existing.get("valueRanges") or [{}]
+        next_row = len(value_ranges[0].get("values") or []) + 1
 
-    await tools["sheets_update_cells"].ainvoke(
-        {
-            "spreadsheet_id": spreadsheet_id,
-            "sheet": _SHEET_TAB,
-            "range": f"A{next_row}:F{next_row}",
-            "data": [values],
-        }
-    )
+        await tools["sheets_update_cells"].ainvoke(
+            {
+                "spreadsheet_id": spreadsheet_id,
+                "sheet": _SHEET_TAB,
+                "range": f"A{next_row}:F{next_row}",
+                "data": [values],
+            }
+        )
+    except Exception:
+        logger.exception("Failed to append row via MCP sheets server")
+        raise
+    logger.info("Row appended via MCP sheets server at row %d", next_row)
 
 
 # --- smoke test -----------------------------------------------------------

@@ -7,7 +7,10 @@ description: Registry of MCP servers this agent host connects to. Add new server
 import os
 from pathlib import Path
 
-from tools.sheets_auth import materialize_oauth_client_file
+from integrations.sheets_auth import materialize_oauth_client_file
+from core.logger import get_logger
+
+logger = get_logger(__name__)
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _JOBSPY_SERVER_ENTRY = _REPO_ROOT / "job_spy_mcp" / "jobspy-mcp-server" / "src" / "index.js"
@@ -47,3 +50,5 @@ MCP_SERVERS = {
         ),
     },
 }
+
+logger.info("Registered MCP servers: %s", list(MCP_SERVERS))

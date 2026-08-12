@@ -23,7 +23,10 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 
+from core.logger import get_logger
+
 load_dotenv()
+logger = get_logger(__name__)
 
 _REDIRECT_PORT = 8765
 _TOKEN_PATH = Path(__file__).resolve().parent.parent / ".google_tokens" / "sheets.json"
@@ -74,14 +77,26 @@ def get_sheets_credentials() -> Credentials:
         creds = Credentials.from_authorized_user_file(str(_TOKEN_PATH), _SCOPES)
 
     if creds and creds.valid:
+        logger.info("Reusing cached Google Sheets credentials from %s", _TOKEN_PATH)
         return creds
 
     if creds and creds.expired and creds.refresh_token:
-        creds.refresh(Request())
+        logger.info("Refreshing expired Google Sheets access token")
+        try:
+            creds.refresh(Request())
+        except Exception:
+            logger.exception("Failed to refresh Google Sheets access token")
+            raise
     else:
-        flow = InstalledAppFlow.from_client_config(_client_config(), _SCOPES)
-        creds = flow.run_local_server(port=_REDIRECT_PORT)
+        logger.info("No usable cached token; starting OAuth consent flow")
+        try:
+            flow = InstalledAppFlow.from_client_config(_client_config(), _SCOPES)
+            creds = flow.run_local_server(port=_REDIRECT_PORT)
+        except Exception:
+            logger.exception("Google Sheets OAuth consent flow failed")
+            raise
 
     _TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
     _TOKEN_PATH.write_text(creds.to_json(), encoding="utf-8")
+    logger.info("Saved Google Sheets credentials to %s", _TOKEN_PATH)
     return creds

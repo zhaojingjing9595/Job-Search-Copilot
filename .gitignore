@@ -4,3 +4,5 @@ __pycache__/
 .venv/
 .mcp_tokens/
 .google_tokens/
+vector_store/
+logs/
