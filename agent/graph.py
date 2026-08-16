@@ -86,6 +86,29 @@ def run(goal: str, recursion_limit: int = 25) -> str:
     return final_state["messages"][-1].content
 
 
+def stream(goal: str, recursion_limit: int = 25):
+    """Invoke the agent loop on a goal, yielding one (node_name, update) pair
+    per graph step as it happens - Phase 7 tracing, for a caller (main.py) to
+    render node transitions live instead of blocking until the final answer.
+
+    Args:
+        goal: e.g. "find backend jobs in Tel Aviv and evaluate matches".
+        recursion_limit: max graph steps before LangGraph aborts the run.
+
+    Yields:
+        tuple[str, dict]: node_name ("agent" or "tools") and that node's
+        MessagesState update ({"messages": [...]}) for the step just completed.
+    """
+    app = build_graph()
+    messages = [SystemMessage(content=_SYSTEM_PROMPT), ("user", goal)]
+    logger.info("Streaming agent for goal: %r", goal)
+    for update in app.stream(
+        {"messages": messages}, config={"recursion_limit": recursion_limit}, stream_mode="updates"
+    ):
+        for node_name, node_update in update.items():
+            yield node_name, node_update
+
+
 if __name__ == "__main__":
     goal = " ".join(sys.argv[1:]) or "find backend jobs in Tel Aviv and evaluate matches"
     result = run(goal)

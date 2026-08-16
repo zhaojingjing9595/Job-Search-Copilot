@@ -110,6 +110,66 @@ def cached_profile_query_embedding(profile: dict, force_refresh: bool = False) -
     return vector
 
 
+_EMBED_CHUNK_SIZE = 20  # small enough that one 429 only loses this chunk, not the whole run
+
+
+def cached_embed_documents(
+    cache_name: str, items: list[tuple[str, str]], force_refresh: bool = False
+) -> dict[str, list[float]]:
+    """Return {id: embedding} for a list of (id, text) pairs, embedding only
+    the ones missing from dev_cache/<cache_name>.json or whose text changed.
+
+    Written for eval/ranking_eval.py: the golden set can be 40-100+ postings,
+    and the free-tier embedding quota is small enough that a single eval run
+    can exhaust it - so this embeds in small chunks and saves the cache after
+    every chunk, not just at the end. A run that dies partway through (429,
+    Ctrl-C, whatever) leaves everything embedded so far on disk; re-running
+    after quota resets only re-embeds what's still missing.
+
+    Args:
+        force_refresh: ignore any existing cache entries and re-embed everything.
+
+    Returns:
+        dict[str, list[float]]: embedding per item id, same ids as `items`.
+
+    Raises:
+        Whatever the embedding call raises (e.g. a 429 from Google) once all
+        chunks that *could* be embedded have been cached - callers can just
+        re-run to pick up where this left off.
+    """
+    from services.vector_store import _embeddings
+
+    path = _cache_path(cache_name)
+    cached = json.loads(path.read_text(encoding="utf-8")) if path.exists() and not force_refresh else {}
+
+    result: dict[str, list[float]] = {}
+    to_embed: list[tuple[str, str]] = []
+    for item_id, text in items:
+        entry = cached.get(item_id)
+        if entry and entry.get("text") == text:
+            result[item_id] = entry["embedding"]
+        else:
+            to_embed.append((item_id, text))
+
+    if not to_embed:
+        logger.info("All %d item(s) for %r already cached", len(items), cache_name)
+        return result
+
+    logger.info("Embedding %d new/changed item(s) for %r (%d already cached)",
+                len(to_embed), cache_name, len(result))
+    for start in range(0, len(to_embed), _EMBED_CHUNK_SIZE):
+        chunk = to_embed[start:start + _EMBED_CHUNK_SIZE]
+        vectors = _embeddings.embed_documents([text for _, text in chunk])
+        for (item_id, text), vector in zip(chunk, vectors):
+            result[item_id] = vector
+            cached[item_id] = {"text": text, "embedding": vector}
+        path.write_text(json.dumps(cached), encoding="utf-8")
+        logger.info("Embedded and cached %d/%d item(s) for %r",
+                     min(start + _EMBED_CHUNK_SIZE, len(to_embed)), len(to_embed), cache_name)
+
+    return result
+
+
 async def _main():
     force_refresh = "--refresh" in sys.argv
     postings = await cached_search_jobs(force_refresh=force_refresh, **_DEFAULT_SEARCH)

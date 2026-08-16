@@ -105,8 +105,11 @@ def draft_cover_letter(posting: dict, profile: dict | None = None, top_k: int = 
             retrieving chunks - kept only as a Phase 8 groundedness baseline.
 
     Returns:
-        dict: {"letter": str, "chunks": list[dict]} - chunks is empty when
-        use_rag is False, since nothing was retrieved.
+        dict: {"letter": str, "chunks": list[dict], "prompt": str} - chunks
+        is empty when use_rag is False, since nothing was retrieved; prompt
+        is the exact text sent to Gemini (Phase 8.3 measures its token count
+        to compare RAG's retrieved-chunk prompt against the no-RAG full-CV
+        dump it's competing against).
     """
     profile = profile or load_profile()
     llm = GoogleGenerativeAI(model=GEMINI_MODEL, google_api_key=os.environ["GEMINI_API_KEY"])
@@ -127,7 +130,7 @@ def draft_cover_letter(posting: dict, profile: dict | None = None, top_k: int = 
 
     logger.info("Drafting cover letter for %r at %r (rag=%s)", common["title"], common["company"], use_rag)
     letter = llm.invoke(prompt)
-    return {"letter": letter.strip(), "chunks": chunks}
+    return {"letter": letter.strip(), "chunks": chunks, "prompt": prompt}
 
 
 def _smoke_test():

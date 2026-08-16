@@ -135,6 +135,9 @@ def log_posting(company: str, title: str, match_reasoning: str, status: str,
     about - match_reasoning must explain *why*, not restate a score. Never
     call this for postings you haven't looked at.
 
+    Guardrails applied automatically: a posting whose link is already in the
+    sheet is skipped rather than logged twice (report this, don't retry).
+
     Args:
         company: company name.
         title: job title.
@@ -144,7 +147,8 @@ def log_posting(company: str, title: str, match_reasoning: str, status: str,
         log_date: ISO date string; defaults to today if omitted.
 
     Returns:
-        "ok" on success.
+        "appended", "skipped_duplicate" (link already logged), or "dry_run"
+        (DRY_RUN is set - nothing was written).
     """
     row = {
         "company": company,
@@ -154,8 +158,7 @@ def log_posting(company: str, title: str, match_reasoning: str, status: str,
         "link": link,
         "date": log_date or date.today().isoformat(),
     }
-    log_job_match(row)
-    return "ok"
+    return log_job_match(row)
 
 
 AGENT_TOOLS = [search_jobs, get_profile, draft_cover_letter, log_posting]

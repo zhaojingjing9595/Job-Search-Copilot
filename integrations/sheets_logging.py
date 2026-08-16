@@ -12,6 +12,13 @@ Same arguments, same resulting row. The MCP path is the one to study for how
 tool calls flow through an MCP server; the direct path is the dependency-free
 fallback (no subprocess, no uvx) if the server misbehaves.
 
+Phase 6 guardrails, both backends: exact-link dedup (skip a row whose link is
+already in the sheet - stacks with the semantic near-dup check in
+services/vector_store.py, which catches the same role cross-posted under a
+different URL) and a DRY_RUN env flag (logs what would be written instead of
+writing it). Both functions now return a status string - "appended",
+"skipped_duplicate", or "dry_run" - instead of None.
+
 Note on the MCP path: mcp-google-sheets has no "append" tool - `add_rows` only
 inserts blank rows - so appending is read-then-write (get_sheet_data to find
 the first empty row, update_cells to fill it). gspread's append_row() does
@@ -51,6 +58,13 @@ def _resolve_sheet_id(spreadsheet_id: str | None) -> str:
     return spreadsheet_id or os.environ["GOOGLE_SHEET_ID"]
 
 
+def _is_dry_run() -> bool:
+    return os.environ.get("DRY_RUN", "").strip().lower() in ("1", "true", "yes")
+
+
+_LINK_FIELD_INDEX = _ROW_FIELDS.index("link")
+
+
 # --- direct Sheets API (gspread) ------------------------------------------
 
 def _get_worksheet(spreadsheet_id: str | None = None):
@@ -59,23 +73,46 @@ def _get_worksheet(spreadsheet_id: str | None = None):
     return client.open_by_key(_resolve_sheet_id(spreadsheet_id)).worksheet(_SHEET_TAB)
 
 
-def log_job_match(row: dict, spreadsheet_id: str | None = None) -> None:
+def _get_logged_links(worksheet) -> set[str]:
+    """Every link already in the sheet, read from the same worksheet object
+    the append will use, so no extra round trip through Sheets auth."""
+    rows = worksheet.get_all_values()[1:]  # skip header
+    return {row[_LINK_FIELD_INDEX] for row in rows if len(row) > _LINK_FIELD_INDEX}
+
+
+def log_job_match(row: dict, spreadsheet_id: str | None = None) -> str:
     """Append one matched-job row to the tracking sheet via the Sheets API.
+
+    Guardrails: skips rows whose link is already logged (exact-link dedup),
+    and honors DRY_RUN (logs what would be written, writes nothing).
 
     Args:
         row (dict): must contain all of _ROW_FIELDS
             (company, title, match_reasoning, status, link, date).
         spreadsheet_id (str | None): defaults to GOOGLE_SHEET_ID from .env.
+
+    Returns:
+        str: "appended", "skipped_duplicate", or "dry_run".
     """
+    values = _row_values(row)
+    worksheet = _get_worksheet(spreadsheet_id)
+
+    if row["link"] in _get_logged_links(worksheet):
+        logger.info("Skipping duplicate link for %r: %s", row.get("company"), row["link"])
+        return "skipped_duplicate"
+
+    if _is_dry_run():
+        logger.info("[DRY_RUN] would append row for %r: %s", row.get("company"), row)
+        return "dry_run"
+
     logger.info("Appending job match row for %r to Sheets API", row.get("company"))
     try:
-        _get_worksheet(spreadsheet_id).append_row(
-            _row_values(row), value_input_option="USER_ENTERED"
-        )
+        worksheet.append_row(values, value_input_option="USER_ENTERED")
     except Exception:
         logger.exception("Failed to append row via Sheets API")
         raise
     logger.info("Row appended via Sheets API")
+    return "appended"
 
 
 # --- via the mcp-google-sheets MCP server ---------------------------------
@@ -105,26 +142,44 @@ def _parse_mcp_result(result):
     return result
 
 
-async def log_job_match_via_mcp(row: dict, spreadsheet_id: str | None = None) -> None:
+async def log_job_match_via_mcp(row: dict, spreadsheet_id: str | None = None) -> str:
     """Append one matched-job row to the tracking sheet through the MCP server.
+
+    Guardrails: skips rows whose link is already logged (exact-link dedup),
+    and honors DRY_RUN (logs what would be written, writes nothing).
 
     Args:
         row (dict): must contain all of _ROW_FIELDS.
         spreadsheet_id (str | None): defaults to GOOGLE_SHEET_ID from .env.
+
+    Returns:
+        str: "appended", "skipped_duplicate", or "dry_run".
     """
     values = _row_values(row)
     spreadsheet_id = _resolve_sheet_id(spreadsheet_id)
-    logger.info("Appending job match row for %r via MCP sheets server", row.get("company"))
     try:
         tools = {tool.name: tool for tool in await get_sheets_tools()}
 
+        # A:F covers every _ROW_FIELDS column - one read gives both the
+        # existing links (for dedup) and the row count (for the next append).
         existing = _parse_mcp_result(await tools["sheets_get_sheet_data"].ainvoke(
-            {"spreadsheet_id": spreadsheet_id, "sheet": _SHEET_TAB, "range": "A:A"}
+            {"spreadsheet_id": spreadsheet_id, "sheet": _SHEET_TAB, "range": "A:F"}
         ))
         # shape: {"spreadsheetId": ..., "valueRanges": [{"range": ..., "values": [[...], ...]}]}
         value_ranges = existing.get("valueRanges") or [{}]
-        next_row = len(value_ranges[0].get("values") or []) + 1
+        existing_rows = (value_ranges[0].get("values") or [])[1:]  # skip header
+        existing_links = {r[_LINK_FIELD_INDEX] for r in existing_rows if len(r) > _LINK_FIELD_INDEX}
+        next_row = len(existing_rows) + 2  # +1 for header, +1 for 1-indexing
 
+        if row["link"] in existing_links:
+            logger.info("Skipping duplicate link for %r: %s", row.get("company"), row["link"])
+            return "skipped_duplicate"
+
+        if _is_dry_run():
+            logger.info("[DRY_RUN] would append row for %r via MCP: %s", row.get("company"), row)
+            return "dry_run"
+
+        logger.info("Appending job match row for %r via MCP sheets server", row.get("company"))
         await tools["sheets_update_cells"].ainvoke(
             {
                 "spreadsheet_id": spreadsheet_id,
@@ -137,6 +192,7 @@ async def log_job_match_via_mcp(row: dict, spreadsheet_id: str | None = None) ->
         logger.exception("Failed to append row via MCP sheets server")
         raise
     logger.info("Row appended via MCP sheets server at row %d", next_row)
+    return "appended"
 
 
 # --- smoke test -----------------------------------------------------------
@@ -152,13 +208,15 @@ _TEST_ROW = {
 
 
 def _smoke_test(use_mcp: bool, spreadsheet_id: str | None = None):
+    # _TEST_ROW's link is fixed, so running this twice in a row demonstrates
+    # the Phase 6 dedup guardrail: 1st run -> "appended", 2nd -> "skipped_duplicate".
     if use_mcp:
         import asyncio
-        asyncio.run(log_job_match_via_mcp(_TEST_ROW, spreadsheet_id))
-        console.print("[bold green]Row appended via MCP server.[/bold green]")
+        status = asyncio.run(log_job_match_via_mcp(_TEST_ROW, spreadsheet_id))
+        console.print(f"[bold green]MCP path status: {status}[/bold green]")
     else:
-        log_job_match(_TEST_ROW, spreadsheet_id)
-        console.print("[bold green]Row appended via Sheets API.[/bold green]")
+        status = log_job_match(_TEST_ROW, spreadsheet_id)
+        console.print(f"[bold green]Sheets API status: {status}[/bold green]")
 
     console.print("[bold]Sheet now contains:[/bold]")
     console.print(_get_worksheet(spreadsheet_id).get_all_values())
