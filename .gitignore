@@ -6,3 +6,4 @@ __pycache__/
 .google_tokens/
 vector_store/
 logs/
+dev_cache/
