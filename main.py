@@ -12,6 +12,7 @@ usage: python main.py "find backend jobs in Tel Aviv and evaluate matches"
        python main.py --recursion-limit 10 "..."
 """
 import argparse
+import asyncio
 
 from dotenv import load_dotenv
 from rich.console import Console
@@ -47,10 +48,10 @@ def _render_tools_update(messages: list) -> None:
         console.print(Panel(str(msg.content), title=f"tool result: {name}", border_style="yellow"))
 
 
-def main() -> None:
+async def main() -> None:
     parser = argparse.ArgumentParser(
         description="Job-search copilot: an LLM-driven agent that searches, "
-                     "evaluates, drafts cover letters for, and logs job postings."
+                     "evaluates, drafts customized CV profiles for, and logs job postings."
     )
     parser.add_argument("goal", nargs="*", help=f"what to ask the agent to do (default: {_DEFAULT_GOAL!r})")
     parser.add_argument("--recursion-limit", type=int, default=25,
@@ -61,7 +62,7 @@ def main() -> None:
     console.print(Panel(goal, title="goal", border_style="bold blue"))
 
     final_content = ""
-    for node_name, update in stream(goal, recursion_limit=args.recursion_limit):
+    async for node_name, update in stream(goal, recursion_limit=args.recursion_limit):
         messages = update.get("messages", [])
         if node_name == "agent":
             _render_agent_update(messages)
@@ -74,4 +75,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

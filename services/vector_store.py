@@ -4,7 +4,7 @@ vector_store.py
 description: Chroma wrapper for the semantic layer that sits in front of the
 agent (Phase 2.5). Two persistent collections, both cosine-indexed:
 
-  cv_chunks  - CV highlight bullets, for RAG cover-letter drafting later
+  cv_chunks  - CV highlight bullets, for RAG customized CV profile drafting later
   postings   - scraped job postings, for cosine pre-ranking + near-dup detection
 
 Embeddings come from GoogleGenerativeAIEmbeddings (gemini-embedding-001),

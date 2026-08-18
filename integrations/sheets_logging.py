@@ -43,7 +43,7 @@ console = Console()
 logger = get_logger(__name__)
 
 _SHEET_TAB = "Sheet1"  # rename here if your tab is named differently
-_ROW_FIELDS = ["company", "title", "match_reasoning", "status", "link", "date"]
+_ROW_FIELDS = ["company", "title", "match_reasoning", "status", "link", "date", "cv_profile_path"]
 
 
 def _row_values(row: dict) -> list[str]:
@@ -160,10 +160,10 @@ async def log_job_match_via_mcp(row: dict, spreadsheet_id: str | None = None) ->
     try:
         tools = {tool.name: tool for tool in await get_sheets_tools()}
 
-        # A:F covers every _ROW_FIELDS column - one read gives both the
+        # A:G covers every _ROW_FIELDS column - one read gives both the
         # existing links (for dedup) and the row count (for the next append).
         existing = _parse_mcp_result(await tools["sheets_get_sheet_data"].ainvoke(
-            {"spreadsheet_id": spreadsheet_id, "sheet": _SHEET_TAB, "range": "A:F"}
+            {"spreadsheet_id": spreadsheet_id, "sheet": _SHEET_TAB, "range": "A:G"}
         ))
         # shape: {"spreadsheetId": ..., "valueRanges": [{"range": ..., "values": [[...], ...]}]}
         value_ranges = existing.get("valueRanges") or [{}]
@@ -184,7 +184,7 @@ async def log_job_match_via_mcp(row: dict, spreadsheet_id: str | None = None) ->
             {
                 "spreadsheet_id": spreadsheet_id,
                 "sheet": _SHEET_TAB,
-                "range": f"A{next_row}:F{next_row}",
+                "range": f"A{next_row}:G{next_row}",
                 "data": [values],
             }
         )
@@ -204,6 +204,7 @@ _TEST_ROW = {
     "status": "n/a",
     "link": "https://example.com",
     "date": "2026-08-09",
+    "cv_profile_path": "",
 }
 
 

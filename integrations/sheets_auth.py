@@ -85,9 +85,10 @@ def get_sheets_credentials() -> Credentials:
         try:
             creds.refresh(Request())
         except Exception:
-            logger.exception("Failed to refresh Google Sheets access token")
-            raise
-    else:
+            logger.warning("Failed to refresh Google Sheets access token; falling back to OAuth consent flow")
+            creds = None
+
+    if not (creds and creds.valid):
         logger.info("No usable cached token; starting OAuth consent flow")
         try:
             flow = InstalledAppFlow.from_client_config(_client_config(), _SCOPES)

@@ -23,7 +23,7 @@ from rich.console import Console
 from core.logger import get_logger
 from integrations.jobs_searching import search_jobs as _jobspy_search
 from integrations.sheets_logging import log_job_match
-from services.cover_letter import draft_cover_letter as _draft_cover_letter
+from services.cv_profile import draft_cv_profile as _draft_cv_profile, save_cv_profile
 from services.vector_store import index_postings, load_profile
 from services.reranker import run_cascade
 
@@ -63,7 +63,9 @@ async def search_jobs(search_term: str, location: str = "Tel Aviv",
     Args:
         search_term: role/keywords to search for, e.g. "Full Stack Engineer".
         location: city/region to search in.
-        country_indeed: country code Indeed should search within.
+        country_indeed: full country name Indeed should search within (e.g.
+            "Israel", "USA", "United Kingdom") - NOT an ISO code like "IL",
+            which the underlying scraper rejects.
         results_wanted: max postings to scrape before ranking (20-50 typical).
         hours_old: only include postings newer than this many hours.
 
@@ -93,7 +95,7 @@ async def search_jobs(search_term: str, location: str = "Tel Aviv",
 def get_profile() -> str:
     """Return the candidate's profile: title, summary, experience, skills, and preferences.
 
-    Use this to ground match reasoning and cover-letter drafting in the
+    Use this to ground match reasoning and CV profile drafting in the
     candidate's actual background rather than assuming details.
 
     Returns:
@@ -103,12 +105,14 @@ def get_profile() -> str:
 
 
 @tool
-def draft_cover_letter(title: str, company: str, description: str) -> str:
-    """Draft a cover letter for a specific posting, grounded in the candidate's CV.
+def draft_cv_profile(title: str, company: str, description: str) -> str:
+    """Draft a customized CV profile for a specific posting, grounded in the candidate's CV.
 
-    Retrieves the CV bullets most relevant to this posting and writes the
-    letter using only those bullets - it will not invent experience the
-    candidate doesn't have. Call this only for postings worth applying to.
+    Retrieves the CV bullets most relevant to this posting and builds a
+    tailored summary/highlights/skills profile using only those bullets - it
+    will not invent experience the candidate doesn't have. The tailored
+    profile is also rendered and saved to applications/ as a submission-
+    ready Markdown file. Call this only for postings worth applying to.
 
     Args:
         title: the posting's job title.
@@ -116,19 +120,26 @@ def draft_cover_letter(title: str, company: str, description: str) -> str:
         description: the posting's job description text.
 
     Returns:
-        JSON object {"letter": str, "evidence": list[str]} - evidence is the
-        exact CV bullets the letter is grounded in.
+        JSON object {"profile": {"summary": str, "highlights": list[str],
+        "skills": list[str]}, "evidence": list[str], "cv_profile_path": str}
+        - evidence is the exact CV bullets the profile is grounded in;
+        cv_profile_path is where the rendered document was saved, pass it to
+        log_posting so the tracking sheet points at it.
     """
-    result = _draft_cover_letter({"title": title, "company": company, "description": description})
+    posting = {"title": title, "company": company, "description": description}
+    result = _draft_cv_profile(posting)
+    candidate_name = load_profile().get("title", "the candidate")
+    path = save_cv_profile(result["profile"], posting, candidate_name)
     return json.dumps({
-        "letter": result["letter"],
+        "profile": result["profile"],
         "evidence": [c["text"] for c in result["chunks"]],
+        "cv_profile_path": str(path),
     })
 
 
 @tool
 def log_posting(company: str, title: str, match_reasoning: str, status: str,
-                 link: str, log_date: str = "") -> str:
+                 link: str, log_date: str = "", cv_profile_path: str = "") -> str:
     """Append one evaluated posting to the tracking sheet.
 
     Only call this for postings you have actually evaluated and reasoned
@@ -145,6 +156,8 @@ def log_posting(company: str, title: str, match_reasoning: str, status: str,
         status: e.g. "to apply", "applied", "not a fit".
         link: posting URL.
         log_date: ISO date string; defaults to today if omitted.
+        cv_profile_path: cv_profile_path returned by draft_cv_profile, if you
+            drafted one for this posting; leave blank otherwise.
 
     Returns:
         "appended", "skipped_duplicate" (link already logged), or "dry_run"
@@ -157,11 +170,12 @@ def log_posting(company: str, title: str, match_reasoning: str, status: str,
         "status": status,
         "link": link,
         "date": log_date or date.today().isoformat(),
+        "cv_profile_path": cv_profile_path,
     }
     return log_job_match(row)
 
 
-AGENT_TOOLS = [search_jobs, get_profile, draft_cover_letter, log_posting]
+AGENT_TOOLS = [search_jobs, get_profile, draft_cv_profile, log_posting]
 
 
 def _smoke_test():

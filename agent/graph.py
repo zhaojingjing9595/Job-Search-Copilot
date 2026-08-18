@@ -32,14 +32,17 @@ console = Console()
 logger = get_logger(__name__)
 
 _SYSTEM_PROMPT = """You are a job-search copilot. You have tools to search live postings, \
-read the candidate's profile, draft grounded cover letters, and log evaluated postings to a \
-tracking sheet.
+read the candidate's profile, draft grounded customized CV profiles, and log evaluated postings \
+to a tracking sheet.
 
 For each posting you consider, reason about fit against the candidate's actual profile \
-(skills, experience, preferences) before deciding anything. Only draft a cover letter for \
-postings worth applying to. Only log postings you have actually evaluated, and always give a \
-real match_reasoning that explains your judgment - never a restatement of a score. When you've \
-searched, evaluated, and logged what's worth logging, summarize what you found and stop."""
+(skills, experience, preferences) before deciding anything. Only draft a customized CV profile \
+for postings worth applying to - this saves a submission-ready file and gives you back its path. \
+When you log such a posting, pass that path as cv_profile_path so the tracking sheet points \
+straight at the artifact ready to submit. Only log postings you have actually evaluated, and \
+always give a real match_reasoning that explains your judgment - never a restatement of a score. \
+When you've searched, evaluated, tailored, and logged what's worth logging, summarize what you \
+found and stop."""
 
 _llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL, google_api_key=os.environ["GEMINI_API_KEY"])
 _llm_with_tools = _llm.bind_tools(AGENT_TOOLS)
@@ -69,7 +72,7 @@ def build_graph():
     return graph.compile()
 
 
-def run(goal: str, recursion_limit: int = 25) -> str:
+async def run(goal: str, recursion_limit: int = 25) -> str:
     """Invoke the agent loop on a goal and return its final answer.
 
     Args:
@@ -82,14 +85,17 @@ def run(goal: str, recursion_limit: int = 25) -> str:
     app = build_graph()
     messages = [SystemMessage(content=_SYSTEM_PROMPT), ("user", goal)]
     logger.info("Running agent for goal: %r", goal)
-    final_state = app.invoke({"messages": messages}, config={"recursion_limit": recursion_limit})
+    final_state = await app.ainvoke({"messages": messages}, config={"recursion_limit": recursion_limit})
     return final_state["messages"][-1].content
 
 
-def stream(goal: str, recursion_limit: int = 25):
+async def stream(goal: str, recursion_limit: int = 25):
     """Invoke the agent loop on a goal, yielding one (node_name, update) pair
     per graph step as it happens - Phase 7 tracing, for a caller (main.py) to
     render node transitions live instead of blocking until the final answer.
+
+    Uses astream/ToolNode's async execution path since AGENT_TOOLS includes
+    async tools (search_jobs) that a sync app.stream() can't invoke.
 
     Args:
         goal: e.g. "find backend jobs in Tel Aviv and evaluate matches".
@@ -102,7 +108,7 @@ def stream(goal: str, recursion_limit: int = 25):
     app = build_graph()
     messages = [SystemMessage(content=_SYSTEM_PROMPT), ("user", goal)]
     logger.info("Streaming agent for goal: %r", goal)
-    for update in app.stream(
+    async for update in app.astream(
         {"messages": messages}, config={"recursion_limit": recursion_limit}, stream_mode="updates"
     ):
         for node_name, node_update in update.items():
@@ -110,6 +116,8 @@ def stream(goal: str, recursion_limit: int = 25):
 
 
 if __name__ == "__main__":
+    import asyncio
+
     goal = " ".join(sys.argv[1:]) or "find backend jobs in Tel Aviv and evaluate matches"
-    result = run(goal)
+    result = asyncio.run(run(goal))
     console.print(f"[bold green]Final answer:[/bold green]\n{result}")

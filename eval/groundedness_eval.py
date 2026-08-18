@@ -1,14 +1,14 @@
 """
 groundedness_eval.py
 
-description: Phase 8.3 - measures whether Phase 4.5's RAG cover-letter
-drafting actually reduces hallucination relative to a no-RAG baseline (whole
-CV dumped into the prompt). For up to 20 golden-set postings worth applying
-to (label >= 1), drafts a letter both ways via services.cover_letter (which
-already supports use_rag=True/False), then uses Gemini as a judge to
-decompose each letter into atomic factual claims and mark each grounded in
-the context that variant was actually given - RAG: the retrieved CV chunks;
-no-RAG: the full CV text - or not.
+description: Phase 8.3 - measures whether Phase 4.5's RAG customized CV
+profile drafting actually reduces hallucination relative to a no-RAG
+baseline (whole CV dumped into the prompt). For up to 20 golden-set postings
+worth applying to (label >= 1), drafts a profile both ways via
+services.cv_profile (which already supports use_rag=True/False), then uses
+Gemini as a judge to decompose each profile into atomic factual claims and
+mark each grounded in the context that variant was actually given - RAG:
+the retrieved CV chunks; no-RAG: the full CV text - or not.
 
 Expected result per the build guide: RAG matches or beats no-RAG on
 groundedness at a fraction of the prompt tokens. Either outcome is
@@ -29,7 +29,7 @@ from rich.table import Table
 
 from core.constants import GEMINI_MODEL
 from core.logger import get_logger
-from services.cover_letter import _flatten_cv, draft_cover_letter
+from services.cv_profile import _flatten_cv, draft_cv_profile
 from services.vector_store import load_profile
 
 load_dotenv()
@@ -41,17 +41,17 @@ _DEFAULT_GOLDEN_PATH = _REPO_ROOT / "eval" / "golden_set.json"
 _RESULTS_PATH = _REPO_ROOT / "eval" / "results" / "groundedness_results.json"
 _SAMPLE_SIZE = 20
 
-_JUDGE_PROMPT = """You are checking a cover letter for hallucination.
+_JUDGE_PROMPT = """You are checking a customized CV profile for hallucination.
 
-Context the letter was allowed to draw from:
+Context the profile was allowed to draw from:
 {context}
 
-Cover letter:
+CV profile:
 {letter}
 
-Decompose the letter into atomic factual claims about the candidate's experience, skills, or \
-background (ignore generic filler like "I am excited to apply"). For each claim, decide whether \
-it is directly supported by the context above ("grounded": true) or not ("grounded": false).
+Decompose the profile into atomic factual claims about the candidate's experience, skills, or \
+background (ignore generic filler). For each claim, decide whether it is directly supported by \
+the context above ("grounded": true) or not ("grounded": false).
 
 Return ONLY a JSON array, no other text:
 [{{"claim": "<claim text>", "grounded": true|false}}, ...]
@@ -93,9 +93,16 @@ def _judge_letter(letter: str, context: str) -> list[dict]:
     return json.loads(text[start:end + 1])
 
 
+def _flatten_tailored_profile(tailored: dict) -> str:
+    lines = [tailored.get("summary", "")]
+    lines.extend(f"- {h}" for h in tailored.get("highlights", []))
+    lines.append("Skills: " + ", ".join(tailored.get("skills", [])))
+    return "\n".join(lines)
+
+
 def _evaluate_letter(posting: dict, profile: dict, use_rag: bool) -> dict:
-    result = draft_cover_letter(posting, profile, use_rag=use_rag)
-    letter = result["letter"]
+    result = draft_cv_profile(posting, profile, use_rag=use_rag)
+    letter = _flatten_tailored_profile(result["profile"])
     context = "\n".join(f"- {c['text']}" for c in result["chunks"]) if use_rag else _flatten_cv(profile)
 
     claims = _judge_letter(letter, context)
@@ -112,7 +119,7 @@ def _evaluate_letter(posting: dict, profile: dict, use_rag: bool) -> dict:
 
 
 def _print_table(variant_results: dict[str, list[dict]]) -> None:
-    table = Table(title="RAG vs. no-RAG cover-letter groundedness")
+    table = Table(title="RAG vs. no-RAG CV profile groundedness")
     for col in ["Variant", "Letters", "Avg % grounded", "Avg prompt tokens"]:
         table.add_column(col)
     for name, results in variant_results.items():
