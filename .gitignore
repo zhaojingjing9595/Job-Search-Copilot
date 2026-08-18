@@ -7,3 +7,4 @@ __pycache__/
 vector_store/
 logs/
 dev_cache/
+job_spy_mcp/jobspy-mcp-server/
